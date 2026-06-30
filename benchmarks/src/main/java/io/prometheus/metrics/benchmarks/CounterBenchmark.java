@@ -8,7 +8,9 @@ import io.opentelemetry.api.incubator.metrics.ExtendedLongCounter;
 import io.opentelemetry.api.metrics.DoubleCounter;
 import io.opentelemetry.api.metrics.LongCounter;
 import io.opentelemetry.api.metrics.Meter;
+import io.opentelemetry.context.Context;
 import io.opentelemetry.sdk.OpenTelemetrySdk;
+import io.opentelemetry.sdk.metrics.ExemplarFilter;
 import io.opentelemetry.sdk.metrics.SdkMeterProvider;
 import io.opentelemetry.sdk.resources.Resource;
 import io.opentelemetry.sdk.testing.exporter.InMemoryMetricReader;
@@ -99,6 +101,7 @@ public class CounterBenchmark {
           SdkMeterProvider.builder()
               .registerMetricReader(InMemoryMetricReader.create())
               .setResource(Resource.getDefault())
+            .setExemplarFilter(ExemplarFilter.alwaysOff())
               .build();
       OpenTelemetry openTelemetry =
           OpenTelemetrySdk.builder().setMeterProvider(sdkMeterProvider).build();
@@ -130,7 +133,8 @@ public class CounterBenchmark {
           SdkMeterProvider.builder()
               .registerMetricReader(InMemoryMetricReader.create())
               .setResource(Resource.getDefault())
-              .build();
+            .setExemplarFilter(ExemplarFilter.alwaysOff())
+            .build();
       OpenTelemetry openTelemetry =
           OpenTelemetrySdk.builder().setMeterProvider(sdkMeterProvider).build();
       Meter meter =
@@ -169,7 +173,7 @@ public class CounterBenchmark {
   @Threads(4)
   public DoubleCounter openTelemetryAdd(RandomNumbers randomNumbers, OpenTelemetryCounter counter) {
     for (int i = 0; i < randomNumbers.randomNumbers.length; i++) {
-      counter.doubleCounter.add(randomNumbers.randomNumbers[i], counter.attributes);
+      counter.doubleCounter.add(randomNumbers.randomNumbers[i], counter.attributes, Context.root());
     }
     return counter.doubleCounter;
   }
@@ -178,7 +182,7 @@ public class CounterBenchmark {
   @Threads(4)
   public LongCounter openTelemetryInc(OpenTelemetryCounter counter) {
     for (int i = 0; i < 10 * 1024; i++) {
-      counter.longCounter.add(1, counter.attributes);
+      counter.longCounter.add(1, counter.attributes, Context.root());
     }
     return counter.longCounter;
   }
@@ -191,7 +195,7 @@ public class CounterBenchmark {
   @Threads(4)
   public BoundLongCounter openTelemetryBoundInc(OpenTelemetryBoundCounter counter) {
     for (int i = 0; i < 10 * 1024; i++) {
-      counter.boundLongCounter.add(1);
+      counter.boundLongCounter.add(1, Context.root());
     }
     return counter.boundLongCounter;
   }
@@ -200,7 +204,7 @@ public class CounterBenchmark {
   @Threads(4)
   public LongCounter openTelemetryIncNoLabels(OpenTelemetryCounter counter) {
     for (int i = 0; i < 10 * 1024; i++) {
-      counter.longCounter.add(1);
+      counter.longCounter.add(1, Attributes.empty(), Context.root());
     }
     return counter.longCounter;
   }
