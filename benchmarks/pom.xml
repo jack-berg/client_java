@@ -21,6 +21,9 @@
     <codahale.version>3.0.2</codahale.version>
     <coverage.skip>true</coverage.skip>
     <javadoc.skip>true</javadoc.skip>
+    <!-- Override to pick up bound-instrument support from the local snapshot build -->
+    <opentelemetry.benchmark.version>1.64.0-SNAPSHOT</opentelemetry.benchmark.version>
+    <opentelemetry.benchmark.alpha.version>1.64.0-alpha-SNAPSHOT</opentelemetry.benchmark.alpha.version>
   </properties>
 
   <dependencyManagement>
@@ -31,6 +34,56 @@
         <version>${otel.instrumentation.version}</version>
         <type>pom</type>
         <scope>import</scope>
+      </dependency>
+      <!--
+        Explicit overrides so that the bound-instrument snapshot is used instead of
+        whatever version the instrumentation BOM pins. These entries win over the
+        imported BOM regardless of declaration order.
+      -->
+      <dependency>
+        <groupId>io.opentelemetry</groupId>
+        <artifactId>opentelemetry-api</artifactId>
+        <version>${opentelemetry.benchmark.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>io.opentelemetry</groupId>
+        <artifactId>opentelemetry-api-incubator</artifactId>
+        <version>${opentelemetry.benchmark.alpha.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>io.opentelemetry</groupId>
+        <artifactId>opentelemetry-context</artifactId>
+        <version>${opentelemetry.benchmark.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>io.opentelemetry</groupId>
+        <artifactId>opentelemetry-sdk</artifactId>
+        <version>${opentelemetry.benchmark.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>io.opentelemetry</groupId>
+        <artifactId>opentelemetry-sdk-common</artifactId>
+        <version>${opentelemetry.benchmark.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>io.opentelemetry</groupId>
+        <artifactId>opentelemetry-sdk-metrics</artifactId>
+        <version>${opentelemetry.benchmark.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>io.opentelemetry</groupId>
+        <artifactId>opentelemetry-sdk-trace</artifactId>
+        <version>${opentelemetry.benchmark.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>io.opentelemetry</groupId>
+        <artifactId>opentelemetry-sdk-logs</artifactId>
+        <version>${opentelemetry.benchmark.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>io.opentelemetry</groupId>
+        <artifactId>opentelemetry-sdk-testing</artifactId>
+        <version>${opentelemetry.benchmark.version}</version>
       </dependency>
     </dependencies>
   </dependencyManagement>
@@ -72,6 +125,10 @@
     <dependency>
       <groupId>io.opentelemetry</groupId>
       <artifactId>opentelemetry-sdk-testing</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>io.opentelemetry</groupId>
+      <artifactId>opentelemetry-api-incubator</artifactId>
     </dependency>
   </dependencies>
   <build>

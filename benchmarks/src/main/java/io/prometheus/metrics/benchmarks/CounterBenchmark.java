@@ -3,6 +3,8 @@ package io.prometheus.metrics.benchmarks;
 import io.opentelemetry.api.OpenTelemetry;
 import io.opentelemetry.api.common.AttributeKey;
 import io.opentelemetry.api.common.Attributes;
+import io.opentelemetry.api.incubator.metrics.BoundLongCounter;
+import io.opentelemetry.api.incubator.metrics.ExtendedLongCounter;
 import io.opentelemetry.api.metrics.DoubleCounter;
 import io.opentelemetry.api.metrics.LongCounter;
 import io.opentelemetry.api.metrics.Meter;
@@ -24,6 +26,7 @@ import org.openjdk.jmh.annotations.Threads;
  * Benchmark                                             Mode  Cnt       Score       Error  Units
  * CounterBenchmark.codahaleIncNoLabels                 thrpt   25  141585.607 ±  4512.937  ops/s
  * CounterBenchmark.openTelemetryAdd                    thrpt   25    1734.254 ±    93.992  ops/s
+ * CounterBenchmark.openTelemetryBoundInc               thrpt   25         TBD               ops/s
  * CounterBenchmark.openTelemetryInc                    thrpt   25    1824.626 ±   119.822  ops/s
  * CounterBenchmark.openTelemetryIncNoLabels            thrpt   25    1875.878 ±   130.215  ops/s
  * CounterBenchmark.prometheusAdd                       thrpt   25  121522.492 ±  1724.943  ops/s
@@ -79,6 +82,39 @@ public class CounterBenchmark {
   public static class CodahaleCounterNoLabels {
     final com.codahale.metrics.Counter counter =
         new com.codahale.metrics.MetricRegistry().counter("test");
+  }
+
+  /**
+   * Binds a single attribute set up-front so that the per-record {@link
+   * java.util.concurrent.ConcurrentHashMap} lookup and attribute processing are eliminated. Compare
+   * {@link #openTelemetryBoundInc} against {@link #openTelemetryInc} to see the difference.
+   */
+  @State(Scope.Benchmark)
+  public static class OpenTelemetryBoundCounter {
+
+    final BoundLongCounter boundLongCounter;
+
+    public OpenTelemetryBoundCounter() {
+      SdkMeterProvider sdkMeterProvider =
+          SdkMeterProvider.builder()
+              .registerMetricReader(InMemoryMetricReader.create())
+              .setResource(Resource.getDefault())
+              .build();
+      OpenTelemetry openTelemetry =
+          OpenTelemetrySdk.builder().setMeterProvider(sdkMeterProvider).build();
+      Meter meter =
+          openTelemetry
+              .meterBuilder("instrumentation-library-name")
+              .setInstrumentationVersion("1.0.0")
+              .build();
+      ExtendedLongCounter longCounter =
+          (ExtendedLongCounter) meter.counterBuilder("test1").setDescription("test").build();
+      this.boundLongCounter =
+          longCounter.bind(
+              Attributes.of(
+                  AttributeKey.stringKey("path"), "/",
+                  AttributeKey.stringKey("status"), "200"));
+    }
   }
 
   @State(Scope.Benchmark)
@@ -145,6 +181,19 @@ public class CounterBenchmark {
       counter.longCounter.add(1, counter.attributes);
     }
     return counter.longCounter;
+  }
+
+  /**
+   * Increments a bound counter — no per-record attribute lookup. Pair this with {@link
+   * #openTelemetryInc} to measure the benefit of binding.
+   */
+  @Benchmark
+  @Threads(4)
+  public BoundLongCounter openTelemetryBoundInc(OpenTelemetryBoundCounter counter) {
+    for (int i = 0; i < 10 * 1024; i++) {
+      counter.boundLongCounter.add(1);
+    }
+    return counter.boundLongCounter;
   }
 
   @Benchmark

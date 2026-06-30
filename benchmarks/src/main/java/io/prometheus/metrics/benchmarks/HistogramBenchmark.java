@@ -1,6 +1,10 @@
 package io.prometheus.metrics.benchmarks;
 
 import io.opentelemetry.api.OpenTelemetry;
+import io.opentelemetry.api.common.AttributeKey;
+import io.opentelemetry.api.common.Attributes;
+import io.opentelemetry.api.incubator.metrics.BoundDoubleHistogram;
+import io.opentelemetry.api.incubator.metrics.ExtendedDoubleHistogram;
 import io.opentelemetry.api.metrics.Meter;
 import io.opentelemetry.sdk.OpenTelemetrySdk;
 import io.opentelemetry.sdk.metrics.Aggregation;
@@ -20,12 +24,14 @@ import org.openjdk.jmh.annotations.Threads;
  * Results on a machine with dedicated Ubuntu 24.04 LTS, AMD Ryzen™ 9 7900 × 24, 96.0 GiB RAM:
  *
  * <pre>
- * Benchmark                                             Mode  Cnt       Score       Error  Units
- * HistogramBenchmark.openTelemetryClassic              thrpt   25     966.937 ±    46.984  ops/s
- * HistogramBenchmark.openTelemetryExponential          thrpt   25     816.254 ±    28.033  ops/s
- * HistogramBenchmark.prometheusClassic                 thrpt   25   15468.490 ±   828.441  ops/s
- * HistogramBenchmark.prometheusNative                  thrpt   25    7452.050 ±   282.636  ops/s
- * HistogramBenchmark.simpleclient                      thrpt   25   10082.382 ±   245.428  ops/s
+ * Benchmark                                               Mode  Cnt       Score       Error  Units
+ * HistogramBenchmark.openTelemetryBoundClassic            thrpt   25         TBD               ops/s
+ * HistogramBenchmark.openTelemetryBoundExponential        thrpt   25         TBD               ops/s
+ * HistogramBenchmark.openTelemetryClassic                 thrpt   25     966.937 ±    46.984  ops/s
+ * HistogramBenchmark.openTelemetryExponential             thrpt   25     816.254 ±    28.033  ops/s
+ * HistogramBenchmark.prometheusClassic                    thrpt   25   15468.490 ±   828.441  ops/s
+ * HistogramBenchmark.prometheusNative                     thrpt   25    7452.050 ±   282.636  ops/s
+ * HistogramBenchmark.simpleclient                        thrpt   25   10082.382 ±   245.428  ops/s
  * </pre>
  *
  * The simpleclient (i.e. client_java version 0.16.0 and older) histograms perform about the same as
@@ -71,6 +77,74 @@ public class HistogramBenchmark {
 
     public SimpleclientHistogram() {
       noLabels = io.prometheus.client.Histogram.build().name("name").help("help").create();
+    }
+  }
+
+  /**
+   * Binds an empty attribute set up-front, mirroring how the existing no-label Prometheus and
+   * simpleclient benchmarks work, so the comparison is apples-to-apples. Compare {@link
+   * #openTelemetryBoundClassic} against {@link #openTelemetryClassic} to measure the benefit of
+   * binding.
+   */
+  @State(Scope.Benchmark)
+  public static class OpenTelemetryBoundClassicHistogram {
+
+    final BoundDoubleHistogram boundHistogram;
+
+    public OpenTelemetryBoundClassicHistogram() {
+      SdkMeterProvider sdkMeterProvider =
+          SdkMeterProvider.builder()
+              .registerMetricReader(InMemoryMetricReader.create())
+              .setResource(Resource.getDefault())
+              .registerView(
+                  InstrumentSelector.builder().setName("test").build(),
+                  View.builder()
+                      .setAggregation(
+                          Aggregation.explicitBucketHistogram(
+                              Arrays.asList(
+                                  .005, .01, .025, .05, .1, .25, .5, 1.0, 2.5, 5.0, 10.0)))
+                      .build())
+              .build();
+      OpenTelemetry openTelemetry =
+          OpenTelemetrySdk.builder().setMeterProvider(sdkMeterProvider).build();
+      Meter meter =
+          openTelemetry
+              .meterBuilder("instrumentation-library-name")
+              .setInstrumentationVersion("1.0.0")
+              .build();
+      ExtendedDoubleHistogram histogram =
+          (ExtendedDoubleHistogram) meter.histogramBuilder("test").setDescription("test").build();
+      this.boundHistogram = histogram.bind(Attributes.empty());
+    }
+  }
+
+  /** Same as {@link OpenTelemetryBoundClassicHistogram} but with exponential bucketing. */
+  @State(Scope.Benchmark)
+  public static class OpenTelemetryBoundExponentialHistogram {
+
+    final BoundDoubleHistogram boundHistogram;
+
+    public OpenTelemetryBoundExponentialHistogram() {
+      SdkMeterProvider sdkMeterProvider =
+          SdkMeterProvider.builder()
+              .registerMetricReader(InMemoryMetricReader.create())
+              .setResource(Resource.getDefault())
+              .registerView(
+                  InstrumentSelector.builder().setName("test").build(),
+                  View.builder()
+                      .setAggregation(Aggregation.base2ExponentialBucketHistogram(10_000, 5))
+                      .build())
+              .build();
+      OpenTelemetry openTelemetry =
+          OpenTelemetrySdk.builder().setMeterProvider(sdkMeterProvider).build();
+      Meter meter =
+          openTelemetry
+              .meterBuilder("instrumentation-library-name")
+              .setInstrumentationVersion("1.0.0")
+              .build();
+      ExtendedDoubleHistogram histogram =
+          (ExtendedDoubleHistogram) meter.histogramBuilder("test").setDescription("test").build();
+      this.boundHistogram = histogram.bind(Attributes.empty());
     }
   }
 
@@ -181,5 +255,27 @@ public class HistogramBenchmark {
       histogram.histogram.record(randomNumbers.randomNumbers[i]);
     }
     return histogram.histogram;
+  }
+
+  /** Records into a bound histogram — no per-record attribute lookup. */
+  @Benchmark
+  @Threads(4)
+  public BoundDoubleHistogram openTelemetryBoundClassic(
+      RandomNumbers randomNumbers, OpenTelemetryBoundClassicHistogram histogram) {
+    for (int i = 0; i < randomNumbers.randomNumbers.length; i++) {
+      histogram.boundHistogram.record(randomNumbers.randomNumbers[i]);
+    }
+    return histogram.boundHistogram;
+  }
+
+  /** Records into a bound exponential histogram — no per-record attribute lookup. */
+  @Benchmark
+  @Threads(4)
+  public BoundDoubleHistogram openTelemetryBoundExponential(
+      RandomNumbers randomNumbers, OpenTelemetryBoundExponentialHistogram histogram) {
+    for (int i = 0; i < randomNumbers.randomNumbers.length; i++) {
+      histogram.boundHistogram.record(randomNumbers.randomNumbers[i]);
+    }
+    return histogram.boundHistogram;
   }
 }
